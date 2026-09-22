@@ -6,8 +6,15 @@ description: Save the repos currently attached in WebStorm (or given explicitly)
 # /save-workspace
 
 Turn the set of repos in the current WebStorm session into an umbrella
-workspace folder (CLAUDE.md + `.claude/settings.json` + `.idea/` +
-`<name>.code-workspace`) using `D:\projects\claude-workspace-tools\scripts\New-ClaudeWorkspace.ps1`.
+workspace folder (`<name>.code-workspace` + `Workspace/` with CLAUDE.md,
+`.claude/settings.json`, `.idea/`).
+
+All tooling is one Node CLI (Node ≥ 18, no dependencies). `<skill-dir>` below is
+the "Base directory for this skill" shown at the top of this prompt:
+
+```
+node "<skill-dir>/cli.mjs" <command> ...
+```
 
 ## Steps
 
@@ -21,42 +28,44 @@ workspace folder (CLAUDE.md + `.claude/settings.json` + `.idea/` +
 
 2. **Choose repos.** If more than one was found, use AskUserQuestion
    (multiSelect, all pre-listed with their absolute paths) so the user can drop
-   anything attached ad hoc (like `pixi`). Skip the question if only one.
+   anything attached ad hoc. Skip the question if only one.
 
-3. **Pick the folder with a native Save-As dialog.** Do NOT ask for the name
-   in chat — pop the Windows dialog:
-   ```powershell
-   $dir = & D:\projects\claude-workspace-tools\scripts\Select-WorkspaceFolder.ps1 -SuggestedName <suggestion>
+3. **Pick the folder with a native Save-As dialog.** Don't ask for the name in
+   chat first — pop the dialog (it blocks; use a 300000 ms timeout):
    ```
-   - Run it with a long timeout (300000 ms) — it blocks until the user picks.
+   node "<skill-dir>/cli.mjs" select-folder --suggest <suggestion>
+   ```
    - `<suggestion>`: a sensible default from the repo names (shared prefix like
      `stugan-pi`, else `<cwd-name>-ws`).
-   - It prints the chosen `<parent>\<name>` path, or nothing if cancelled →
-     stop and say the save was cancelled.
-   - `-Name` is the leaf of `$dir`, `-OutDir` is `$dir`.
-   - If `$dir` already exists, ask (AskUserQuestion) whether to overwrite
-     (`-Force`) before proceeding — never overwrite silently.
+   - exit 0 → stdout is the chosen `<parent>/<name>` (not created yet).
+     `--name` is its leaf, `--out` is the full path.
+   - exit 1 → cancelled: stop and say so.
+   - exit 2 → no dialog toolkit on this machine (headless/SSH): fall back to
+     AskUserQuestion for the name; the folder goes under the workspaces root
+     shown by `node "<skill-dir>/cli.mjs" info`.
+   - If the target already exists, ask (AskUserQuestion) whether to overwrite
+     (`--force`) before proceeding — never overwrite silently.
 
 4. **Generate.**
-   ```powershell
-   & D:\projects\claude-workspace-tools\scripts\New-ClaudeWorkspace.ps1 -Name <name> -Folders <p1>, <p2>, ... -OutDir <dir> [-Force]
    ```
-   The script creates a minimal `.idea/<repo>.iml` inside any repo that has
-   never been opened in WebStorm — mention this if it happens (it prints
-   `Created <path>.iml`).
+   node "<skill-dir>/cli.mjs" generate --name <name> --out <dir> [--force] --folders <p1> <p2> ...
+   ```
+   It creates a minimal `.idea/<repo>.iml` inside any repo that has never been
+   opened in WebStorm and prints `Created <path>.iml` — mention it if it happens.
 
-   Layout produced: `<dir>\<name>.code-workspace` (Cursor) and
-   `<dir>\Workspace\` (WebStorm project + Claude cwd — named "Workspace" so
+   Layout produced: `<dir>/<name>.code-workspace` (Cursor) and
+   `<dir>/Workspace/` (WebStorm project + Claude cwd — named "Workspace" so
    WebStorm's project view reads `Workspace [<name>]`).
 
 5. **Offer to open it.** Ask (AskUserQuestion) whether to open the umbrella in
    WebStorm now. If yes:
-   ```powershell
-   Start-Process webstorm.exe -ArgumentList "`"<dir>\Workspace`""
    ```
+   node "<skill-dir>/cli.mjs" open-ide "<dir>/Workspace"
+   ```
+   exit 2 = no launcher found; tell the user to open it via *File → Open*.
 
 6. **Report.** Show the folder path and the ways to use it:
-   - WebStorm: *File → Open →* `<dir>\Workspace` (all repos attached, git per repo)
-   - Claude Code: `cd <dir>\Workspace; claude`
-   - Cursor: `<dir>\<name>.code-workspace`
+   - WebStorm: *File → Open →* `<dir>/Workspace` (all repos attached, git per repo)
+   - Claude Code: `cd <dir>/Workspace && claude`
+   - Cursor: `<dir>/<name>.code-workspace`
    Keep it short; don't dump the generated files.

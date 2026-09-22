@@ -1,0 +1,10 @@
+{
+  "name": "claude-workspace-tools",
+  "version": "1.0.0",
+  "description": "Multi-root umbrella workspaces for Claude Code + WebStorm + Cursor",
+  "type": "module",
+  "bin": { "workspace-tools": "scripts/workspace-tools.mjs" },
+  "engines": { "node": ">=18.11" },
+  "license": "MIT",
+  "private": true
+}
