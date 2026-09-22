@@ -36,7 +36,7 @@ node "<skill-dir>/cli.mjs" <command> ...
    node "<skill-dir>/cli.mjs" select-folder --suggest <suggestion>
    ```
    - `<suggestion>`: a sensible default from the repo names (shared prefix like
-     `stugan-pi`, else `<cwd-name>-ws`).
+     `my-app`, else `<cwd-name>-ws`).
    - exit 0 → stdout is the chosen `<parent>/<name>` (not created yet).
      `--name` is its leaf, `--out` is the full path.
    - exit 1 → cancelled: stop and say so.

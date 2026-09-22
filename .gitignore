@@ -1,1 +1,25 @@
+# IDE / editor
 .idea/
+.vscode/
+.history/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Claude Code local state
+.claude/settings.local.json
