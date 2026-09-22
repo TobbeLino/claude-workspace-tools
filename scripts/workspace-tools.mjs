@@ -7,6 +7,8 @@
 //   workspace-tools select-file   [--initial <dir>]                      -> prints chosen file
 //   workspace-tools open-ide <dir>
 //   workspace-tools info
+//   workspace-tools install [--workspaces-root <dir>] [--no-claude-md]   -> link skills into ~/.claude, add CLAUDE.md block
+//   workspace-tools uninstall
 //
 // Exit codes for the dialogs: 0 chosen, 1 cancelled, 2 no dialog toolkit available (ask the user instead).
 
@@ -15,6 +17,7 @@ import { parseArgs } from 'node:util';
 import { defaultWorkspacesRoot, generate } from './lib/generate.mjs';
 import { selectOpenFile, selectSaveFolder } from './lib/dialogs.mjs';
 import { openInWebStorm } from './lib/ide.mjs';
+import { install, uninstall } from './lib/install.mjs';
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -88,6 +91,24 @@ switch (cmd) {
     break;
   }
 
+  case 'install': {
+    const { values } = parseArgs({
+      args: rest,
+      options: { 'workspaces-root': { type: 'string' }, 'no-claude-md': { type: 'boolean', default: false } },
+    });
+    try {
+      install({ workspacesRoot: values['workspaces-root'], claudeMd: !values['no-claude-md'] });
+    } catch (e) {
+      fail(e.message);
+    }
+    console.log('Done. Start a new Claude Code session to pick up the skills.');
+    break;
+  }
+
+  case 'uninstall':
+    uninstall();
+    break;
+
   default:
-    fail(`Usage: workspace-tools <generate|select-folder|select-file|open-ide|info> ...`);
+    fail(`Usage: workspace-tools <generate|select-folder|select-file|open-ide|info|install|uninstall> ...`);
 }

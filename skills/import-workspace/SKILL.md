@@ -46,7 +46,7 @@ node "<skill-dir>/cli.mjs" <command> ...
    - It creates a minimal `.idea/<repo>.iml` in any repo never opened in
      WebStorm (prints `Created <path>.iml`) — mention if it happens.
 
-   Layout produced: `<dir>/<name>.code-workspace` (Cursor) and
+   Layout produced: `<dir>/<name>.code-workspace` (Cursor / VS Code) and
    `<dir>/Workspace/` (WebStorm project + Claude cwd — named "Workspace" so
    WebStorm's project view reads `Workspace [<name>]`).
 
@@ -59,5 +59,5 @@ node "<skill-dir>/cli.mjs" <command> ...
 
 5. **Report** briefly: `<dir>/Workspace` for WebStorm / `claude`, and that the
    umbrella's own `<dir>/<name>.code-workspace` is now the file to open in
-   Cursor (so both IDEs share one definition; re-run `/import-workspace` on it
+   Cursor / VS Code (so all IDEs share one definition; re-run `/import-workspace` on it
    to refresh WebStorm after editing).

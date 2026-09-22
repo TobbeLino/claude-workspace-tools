@@ -133,7 +133,7 @@ export function generate(opts) {
 Umbrella project generated from ${source} by claude-workspace-tools.
 This folder holds no code — it only references the repos below (via
 \`.claude/settings.json\` → \`permissions.additionalDirectories\` and \`.idea/\`
-for WebStorm; \`../${wsName}.code-workspace\` is the same set for Cursor).
+for WebStorm; \`../${wsName}.code-workspace\` is the same set for Cursor / VS Code).
 Treat all of them as one workspace.
 
 | Repo | Path | VCS |

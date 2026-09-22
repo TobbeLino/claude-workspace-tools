@@ -1,8 +1,8 @@
 # claude-workspace-tools
 
-Multi-root "workspaces" for Claude Code + WebStorm + Cursor. Windows, macOS, Linux.
+Multi-root "workspaces" for Claude Code + WebStorm + Cursor / VS Code. Windows, macOS, Linux.
 
-Cursor has `.code-workspace` files; WebStorm has "attached projects"; Claude Code
+Cursor and VS Code have `.code-workspace` files; WebStorm has "attached projects"; Claude Code
 has `permissions.additionalDirectories`. This repo makes one **umbrella folder**
 that serves all three:
 
@@ -37,48 +37,27 @@ Both offer to launch WebStorm on the result.
 
 ## Install
 
-Clone, then link the two skill folders into `~/.claude/skills/`:
-
 ```bash
-git clone <this repo> ~/projects/claude-workspace-tools
-cd ~/projects/claude-workspace-tools
-# macOS / Linux
-ln -s "$PWD/skills/save-workspace"   ~/.claude/skills/save-workspace
-ln -s "$PWD/skills/import-workspace" ~/.claude/skills/import-workspace
+git clone https://github.com/TobbeLino/claude-workspace-tools.git ~/projects/claude-workspace-tools
+node ~/projects/claude-workspace-tools/scripts/workspace-tools.mjs install --workspaces-root ~/projects/Workspaces
 ```
 
-```powershell
-# Windows (junctions need no admin rights)
-New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\save-workspace"   -Target "$PWD\skills\save-workspace"
-New-Item -ItemType Junction -Path "$env:USERPROFILE\.claude\skills\import-workspace" -Target "$PWD\skills\import-workspace"
-```
+Then start a new Claude Code session. `install` is idempotent and does three things:
 
-Each skill folder holds a `cli.mjs` shim that resolves its own real location
-(through the symlink/junction) and runs `scripts/workspace-tools.mjs`, so the
-repo can live anywhere.
+1. Links `skills/save-workspace` and `skills/import-workspace` into
+   `~/.claude/skills/` (symlink on macOS/Linux, junction on Windows — no admin).
+   Each skill folder holds a `cli.mjs` shim that resolves its real location
+   through the link, so the repo can live anywhere.
+2. Sets `env.CLAUDE_WORKSPACES_ROOT` in `~/.claude/settings.json` (where
+   umbrellas are created; omit `--workspaces-root` to keep the default
+   `~/projects/Workspaces`).
+3. Adds a managed block to `~/.claude/CLAUDE.md` (between
+   `<!-- claude-workspace-tools:start/end -->` markers) that tells Claude to
+   treat attached WebStorm repos / `additionalDirectories` as one workspace,
+   search across all of them, and run git per repo. Skip with `--no-claude-md`.
+   Re-running `install` after a `git pull` refreshes the block.
 
-### Workspaces root
-
-Umbrellas are created under `~/projects/Workspaces` by default. Override with the
-`CLAUDE_WORKSPACES_ROOT` environment variable — easiest in `~/.claude/settings.json`
-so it applies to every Claude session:
-
-```json
-{ "env": { "CLAUDE_WORKSPACES_ROOT": "D:/projects/Workspaces" } }
-```
-
-### Optional: global CLAUDE.md hint
-
-Adding a note like this to `~/.claude/CLAUDE.md` makes Claude treat the attached
-repos as one workspace in every session:
-
-```markdown
-# Multi-repo workspaces
-If `permissions.additionalDirectories` is set, those directories are the workspace.
-If the `webstorm` MCP server is available, call `get_repositories` at session
-start — every VCS root is part of the workspace. Search and reason across all of
-them, say which repo a file belongs to, and run git per repo (`git -C <repo> ...`).
-```
+`node scripts/workspace-tools.mjs uninstall` reverses all three.
 
 ## CLI
 
@@ -89,6 +68,8 @@ node scripts/workspace-tools.mjs select-folder [--suggest <name>] [--initial <di
 node scripts/workspace-tools.mjs select-file   [--initial <dir>]                      # Open dialog → chosen file
 node scripts/workspace-tools.mjs open-ide <dir>                                       # launch WebStorm
 node scripts/workspace-tools.mjs info
+node scripts/workspace-tools.mjs install [--workspaces-root <dir>] [--no-claude-md]
+node scripts/workspace-tools.mjs uninstall
 ```
 
 Dialog exit codes: `0` chosen (path on stdout), `1` cancelled, `2` no dialog
