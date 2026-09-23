@@ -42,15 +42,9 @@ multi-root workspace). Treat the whole set as one workspace, not just the cwd.
   branch or status applies to another.
 - If a discovered repo is not in \`additionalDirectories\`, suggest
   \`/add-dir <path>\` once rather than prompting for permission on every file.
-
-## Repo docs written for other AI tools
-Repos often carry project docs written for Cursor or other agents, which Claude
-Code does not load automatically. Before working in a repo, check its root for
-\`.cursor/rules/*.mdc\` (and \`.cursor/rules/**\`), \`.cursorrules\`, \`AGENTS.md\`
-and \`CLAUDE.md\`, and read the ones relevant to the task. Treat them like that
-repo's \`CLAUDE.md\`: they describe its architecture and conventions, and apply
-only to that repo. In \`.mdc\` files, the \`description\`/\`globs\` frontmatter says
-when a rule applies; \`alwaysApply: true\` means always read it.
+- Claude Code does not load a workspace repo's own instruction files. An umbrella
+  \`CLAUDE.md\` imports or lists them. Without an umbrella, check a repo you touch
+  for \`AGENTS.md\`, \`CLAUDE.md\` and \`.cursor/rules/\` (plain \`ls\` hides dot-folders).
 ${END}
 `;
 

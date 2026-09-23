@@ -10,7 +10,7 @@ that serves all three:
 <workspaces-root>/<name>/
 ├── <name>.code-workspace      ← open in Cursor / VS Code
 └── Workspace/                 ← open in WebStorm; `cd` here and run `claude`
-    ├── CLAUDE.md              ← lists the repos, tells Claude to treat them as one workspace
+    ├── CLAUDE.md              ← lists the repos, imports their agent rules (AGENTS.md, .cursor/rules, ...)
     ├── .claude/settings.json  ← additionalDirectories = the repos
     └── .idea/                 ← modules.xml attaches every repo, vcs.xml maps their git roots
 ```
@@ -54,9 +54,7 @@ Then start a new Claude Code session. `install` is idempotent and does three thi
 3. Adds a managed block to `~/.claude/CLAUDE.md` (between
    `<!-- claude-workspace-tools:start/end -->` markers) that tells Claude to
    treat attached WebStorm repos / `additionalDirectories` as one workspace,
-   search across all of them, run git per repo, and read each repo's docs for
-   other AI tools (`.cursor/rules/`, `.cursorrules`, `AGENTS.md`), which Claude
-   Code does not load on its own. Skip with `--no-claude-md`.
+   search across all of them, and run git per repo. Skip with `--no-claude-md`.
    Re-running `install` after a `git pull` refreshes the block.
 
 `node scripts/workspace-tools.mjs uninstall` reverses all three.
@@ -64,8 +62,8 @@ Then start a new Claude Code session. `install` is idempotent and does three thi
 ## CLI
 
 ```
-node scripts/workspace-tools.mjs generate --workspace <file.code-workspace> [--out <dir>] [--force]
-node scripts/workspace-tools.mjs generate --name <n> --folders <p1> <p2> ... [--out <dir>] [--force]
+node scripts/workspace-tools.mjs generate --workspace <file.code-workspace> [--out <dir>] [--force] [--no-import]
+node scripts/workspace-tools.mjs generate --name <n> --folders <p1> <p2> ... [--out <dir>] [--force] [--no-import]
 node scripts/workspace-tools.mjs select-folder [--suggest <name>] [--initial <dir>]   # Save-As dialog → <parent>/<name>
 node scripts/workspace-tools.mjs select-file   [--initial <dir>]                      # Open dialog → chosen file
 node scripts/workspace-tools.mjs open-ide <dir>                                       # launch WebStorm
@@ -77,6 +75,29 @@ node scripts/workspace-tools.mjs uninstall
 Dialog exit codes: `0` chosen (path on stdout), `1` cancelled, `2` no dialog
 toolkit available. `generate` creates a minimal `.idea/<repo>.iml` inside any
 repo that has never been opened in WebStorm.
+
+## Repo rules for AI agents
+
+Claude Code does not load instruction files from `additionalDirectories`. That
+covers each repo's `CLAUDE.md` (unless `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`)
+and its `AGENTS.md` (never). `generate` scans every repo and writes a
+"Repo docs for AI tools" section into the umbrella `CLAUDE.md`. Nothing inside
+the repos is changed.
+
+- **Imported with `@path`** (loaded at every session start): `AGENTS.md`,
+  `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md`, `.cursorrules`,
+  `.windsurfrules`, `.clinerules`, `.github/copilot-instructions.md`, and rule
+  files that always apply: `.cursor/rules` with `alwaysApply: true`,
+  `.claude/rules` without `paths`, `.windsurf/rules` with `trigger: always_on`,
+  and everything in a `.clinerules/` folder.
+- **Listed by path** with their `globs` / `paths` / `applyTo` / `description`:
+  the other rule files, plus `.github/instructions/**/*.instructions.md` and
+  `.devin/rules/**`. Claude reads them when the task matches.
+
+The imports point outside the umbrella, so the first session asks once to approve
+external imports. Imported files load in full every session. Pass `--no-import`
+to list them by path instead. Paths with spaces are always listed, as `@path`
+stops at whitespace. File contents are read live; new files need a regenerate.
 
 ## Notes
 

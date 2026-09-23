@@ -51,6 +51,115 @@ export function readCodeWorkspace(file, warn = console.warn) {
   return { repos, rest };
 }
 
+// Instruction files written for Claude Code and other agents. Claude Code loads none of
+// them from additionalDirectories (not even CLAUDE.md / AGENTS.md by default), so the
+// umbrella CLAUDE.md @-imports the always-on ones and lists the scoped ones by path.
+
+// Single files that always apply to the whole repo.
+const ALWAYS_FILES = [
+  'AGENTS.md', 'CLAUDE.md', '.claude/CLAUDE.md', 'GEMINI.md',
+  '.cursorrules', '.windsurfrules', '.clinerules', '.github/copilot-instructions.md',
+];
+
+// Rule folders; `always(fm)` decides from a file's frontmatter whether it applies everywhere.
+const RULE_DIRS = [
+  { dir: '.cursor/rules', always: (fm) => /^alwaysApply:\s*true\b/m.test(fm) },
+  { dir: '.claude/rules', always: (fm) => !/^paths:/m.test(fm) },
+  { dir: '.windsurf/rules', always: (fm) => /^trigger:\s*always_on\b/m.test(fm) },
+  { dir: '.github/instructions', always: () => false, match: /\.instructions\.md$/i },
+  { dir: '.clinerules', always: () => true }, // Cline loads every file in the folder
+  { dir: '.devin/rules', always: () => false },
+];
+
+// Frontmatter fields that say when a scoped rule applies.
+const SCOPE_FIELDS = ['globs', 'paths', 'applyTo', 'trigger', 'description'];
+
+function walk(dir, match) {
+  let out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out = out.concat(walk(p, match));
+    else if (match.test(e.name)) out.push(p);
+  }
+  return out;
+}
+
+const isFile = (p) => fs.statSync(p, { throwIfNoEntry: false })?.isFile();
+const isDir = (p) => fs.statSync(p, { throwIfNoEntry: false })?.isDirectory();
+
+function frontmatter(file) {
+  return /^---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(file, 'utf8'))?.[1] || '';
+}
+
+function scopeOf(fm) {
+  const field = (k) => {
+    // Inline value, or a YAML list on the following lines.
+    const m = new RegExp(`^${k}:[ \\t]*(.*)((?:\\r?\\n[ \\t]*-.*)*)`, 'm').exec(fm);
+    if (!m) return null;
+    const items = m[2].split(/\r?\n/).map((l) => l.replace(/^\s*-\s*/, '').trim()).filter(Boolean);
+    return [m[1].trim(), ...items].filter(Boolean).map((v) => v.replace(/^["']|["']$/g, '')).join(', ');
+  };
+  return SCOPE_FIELDS.map((k) => [k, field(k)]).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join('; ') || 'manual';
+}
+
+/** @returns {{ file: string, always: boolean, scope: string | null }[]} paths relative to the repo */
+export function findAgentDocs(repoPath) {
+  const docs = ALWAYS_FILES
+    .filter((f) => isFile(path.join(repoPath, f)))
+    .map((f) => ({ file: f, always: true, scope: null }));
+  for (const { dir, always, match = /\.mdc?$/i } of RULE_DIRS) {
+    const abs = path.join(repoPath, dir);
+    if (!isDir(abs)) continue;
+    for (const p of walk(abs, match).sort()) {
+      const fm = frontmatter(p);
+      const on = always(fm);
+      docs.push({ file: toSlash(path.relative(repoPath, p)), always: on, scope: on ? null : scopeOf(fm) });
+    }
+  }
+  return docs;
+}
+
+// `@path` imports stop at whitespace, so such paths can only be listed.
+const importable = (p) => !/\s/.test(p);
+
+function docsSection(repos, imports) {
+  const found = repos.map((r) => ({ r, docs: findAgentDocs(r.path) })).filter(({ docs }) => docs.length);
+  if (!found.length) return '';
+  const load = [];
+  const scoped = [];
+  for (const { r, docs } of found) {
+    const abs = (d) => `${r.path}/${d.file}`;
+    const on = docs.filter((d) => d.always);
+    const toImport = imports ? on.filter((d) => importable(abs(d))) : [];
+    const toList = on.filter((d) => !toImport.includes(d));
+    if (toImport.length || toList.length) {
+      load.push(`### ${r.name}`, ...toImport.map((d) => `@${abs(d)}`), ...toList.map((d) => `- \`${abs(d)}\``), '');
+    }
+    const s = docs.filter((d) => !d.always);
+    if (s.length) scoped.push(`- **${r.name}**`, ...s.map((d) => `  - \`${abs(d)}\` (${d.scope})`));
+  }
+  const intro = imports
+    ? `Instruction files the repos carry for Claude Code and other agents. Claude Code does
+not load them from additional directories, so the ones that always apply are imported
+below. Each one applies only to its own repo. The first session asks once to approve
+these external imports.`
+    : `Instruction files the repos carry for Claude Code and other agents. Claude Code does
+not load them from additional directories. Read a repo's always-on files below the
+first time a task touches that repo, questions and explanations included. Each one
+applies only to its own repo.`;
+  return `
+## Repo docs for AI tools
+${intro}
+
+${load.length ? `${load.join('\n')}\n` : ''}${scoped.length ? `### Scoped: read when the task matches
+Do not read these up front. Open one only when the task touches files or topics
+matching its scope.
+${scoped.join('\n')}
+
+` : ''}Found when this umbrella was generated. Regenerate to pick up new files.
+`;
+}
+
 const MINIMAL_IML = `<?xml version="1.0" encoding="UTF-8"?>
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">
@@ -73,6 +182,7 @@ const MINIMAL_IML = `<?xml version="1.0" encoding="UTF-8"?>
  * @param {string} [opts.outDir]         umbrella root; defaults to <workspacesRoot>/<name>
  * @param {string} [opts.workspacesRoot]
  * @param {boolean} [opts.force]         overwrite an existing umbrella
+ * @param {boolean} [opts.imports]       @-import the repos' always-on agent docs (default true); false lists them
  * @param {(msg: string) => void} [opts.warn]
  */
 export function generate(opts) {
@@ -146,7 +256,7 @@ Treat all of them as one workspace.
 | Repo | Path | VCS |
 |---|---|---|
 ${rows}
-
+${docsSection(repos, opts.imports !== false)}
 ## Working here
 - Always state which repo a file belongs to.
 - Run git per repo: \`git -C <path> ...\`. Each repo has its own branch/status.

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // CLI used by the /save-workspace and /import-workspace Claude Code skills.
 //
-//   workspace-tools generate --workspace <file.code-workspace> [--out <dir>] [--force]
-//   workspace-tools generate --name <n> --folders <p1> <p2> ... [--out <dir>] [--force]
+//   workspace-tools generate --workspace <file.code-workspace> [--out <dir>] [--force] [--no-import]
+//   workspace-tools generate --name <n> --folders <p1> <p2> ... [--out <dir>] [--force] [--no-import]
 //   workspace-tools select-folder [--suggest <name>] [--initial <dir>]   -> prints <parent>/<name>
 //   workspace-tools select-file   [--initial <dir>]                      -> prints chosen file
 //   workspace-tools open-ide <dir>
@@ -44,13 +44,14 @@ switch (cmd) {
         folders: { type: 'string', multiple: true },
         out: { type: 'string' },
         force: { type: 'boolean', default: false },
+        'no-import': { type: 'boolean', default: false },
       },
     });
     // `--folders a b c` is also accepted: extra positionals are folders.
     const folders = [...(values.folders || []), ...positionals];
     let res;
     try {
-      res = generate({ workspaceFile: values.workspace, name: values.name, folders, outDir: values.out, force: values.force });
+      res = generate({ workspaceFile: values.workspace, name: values.name, folders, outDir: values.out, force: values.force, imports: !values['no-import'] });
     } catch (e) {
       fail(e.message);
     }
