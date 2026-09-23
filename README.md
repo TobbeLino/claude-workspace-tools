@@ -54,7 +54,9 @@ Then start a new Claude Code session. `install` is idempotent and does three thi
 3. Adds a managed block to `~/.claude/CLAUDE.md` (between
    `<!-- claude-workspace-tools:start/end -->` markers) that tells Claude to
    treat attached WebStorm repos / `additionalDirectories` as one workspace,
-   search across all of them, and run git per repo. Skip with `--no-claude-md`.
+   search across all of them, run git per repo, and read each repo's docs for
+   other AI tools (`.cursor/rules/`, `.cursorrules`, `AGENTS.md`), which Claude
+   Code does not load on its own. Skip with `--no-claude-md`.
    Re-running `install` after a `git pull` refreshes the block.
 
 `node scripts/workspace-tools.mjs uninstall` reverses all three.
