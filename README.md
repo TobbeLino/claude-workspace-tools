@@ -23,7 +23,7 @@ The inner folder is literally named `Workspace` so WebStorm's project view
 | Command | What it does |
 |---|---|
 | `/save-workspace` | Reads the repos attached in the current WebStorm session (via the WebStorm MCP server), lets you deselect ad-hoc ones, pops a native Save-As dialog for the folder, generates the umbrella. Cursor's "Save Workspace As". |
-| `/import-workspace` | Pops an Open dialog for a `.code-workspace` file (or takes a path), generates the umbrella. Re-running it on an umbrella's own `.code-workspace` refreshes it in place. |
+| `/import-workspace` | Pops an Open dialog for a `.code-workspace` file (or takes a path), then a Save-As dialog for the umbrella folder (defaults to `<workspaces-root>/<file-basename>`), generates the umbrella. Re-running it on an umbrella's own `.code-workspace` refreshes it in place. |
 
 Both offer to launch WebStorm on the result.
 

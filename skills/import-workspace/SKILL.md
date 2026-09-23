@@ -27,15 +27,24 @@ node "<skill-dir>/cli.mjs" <command> ...
      exit 0 → stdout is the file. exit 1 → cancelled: stop and say so.
      exit 2 → no dialog toolkit (headless/SSH): ask for the path in chat.
 
-2. **Decide the target folder.** Default is `<workspaces-root>/<file-basename>/`
-   (root shown by `node "<skill-dir>/cli.mjs" info`).
+2. **Decide the target folder.**
    - If the chosen file already lives *inside* an umbrella folder
      (`<dir>/<dir-name>.code-workspace` with `<dir>/Workspace/.claude/settings.json`
      beside it), this is a **refresh**: target = that folder, use `--force`
-     without asking.
-   - Otherwise, if the default target already exists, ask (AskUserQuestion)
-     whether to overwrite (`--force`) or pick another name (Save-As dialog via
-     `select-folder --suggest <name>`, same exit-code rules as above) — never
+     without asking, and skip the dialog.
+   - Otherwise pop the native Save-As dialog. Don't ask in chat first. It opens
+     in the workspaces root with the file's basename pre-filled, so clicking
+     OK keeps the default `<workspaces-root>/<file-basename>/` (blocks; use a
+     300000 ms timeout):
+     ```
+     node "<skill-dir>/cli.mjs" select-folder --suggest <file-basename>
+     ```
+     exit 0 → stdout is the chosen `<parent>/<name>` (not created yet); use it
+     as `--out`. exit 1 → cancelled: stop and say so. exit 2 → no dialog
+     toolkit: use the default `<workspaces-root>/<file-basename>/` (root shown
+     by `node "<skill-dir>/cli.mjs" info`).
+   - If the target already exists, ask (AskUserQuestion) whether to overwrite
+     (`--force`) or pick another folder (re-run `select-folder`) — never
      overwrite silently.
 
 3. **Generate.**

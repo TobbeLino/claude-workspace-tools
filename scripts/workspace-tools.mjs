@@ -12,6 +12,7 @@
 //
 // Exit codes for the dialogs: 0 chosen, 1 cancelled, 2 no dialog toolkit available (ask the user instead).
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { defaultWorkspacesRoot, generate } from './lib/generate.mjs';
@@ -65,7 +66,10 @@ switch (cmd) {
 
   case 'select-folder': {
     const { values } = parseArgs({ args: rest, options: { suggest: { type: 'string' }, initial: { type: 'string' } } });
-    dialogExit(selectSaveFolder({ suggestedName: values.suggest || 'my-workspace', initialDir: values.initial || defaultWorkspacesRoot() }));
+    const initialDir = values.initial || defaultWorkspacesRoot();
+    // The dialog can only start in an existing folder; otherwise OK would save somewhere else.
+    fs.mkdirSync(initialDir, { recursive: true });
+    dialogExit(selectSaveFolder({ suggestedName: values.suggest || 'my-workspace', initialDir }));
     break;
   }
 
