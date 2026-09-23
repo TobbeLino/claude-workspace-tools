@@ -40,13 +40,15 @@ function folderEntry(p, name, warn) {
   };
 }
 
+// Returns the repo folders plus every other top-level key (settings, launch, tasks, extensions, ...).
 export function readCodeWorkspace(file, warn = console.warn) {
   const abs = path.resolve(file);
-  const json = parseJsonc(fs.readFileSync(abs, 'utf8'));
+  const { folders = [], ...rest } = parseJsonc(fs.readFileSync(abs, 'utf8'));
   const wsDir = path.dirname(abs);
-  return (json.folders || [])
+  const repos = folders
     .map((f) => folderEntry(path.isAbsolute(f.path) ? f.path : path.join(wsDir, f.path), f.name, warn))
     .filter(Boolean);
+  return { repos, rest };
 }
 
 const MINIMAL_IML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -75,13 +77,13 @@ const MINIMAL_IML = `<?xml version="1.0" encoding="UTF-8"?>
  */
 export function generate(opts) {
   const warn = opts.warn || console.warn;
-  let repos, wsName, source, sourceFile = null;
+  let repos, wsName, source, sourceFile = null, wsRest = null;
 
   if (opts.workspaceFile) {
     sourceFile = path.resolve(opts.workspaceFile);
     wsName = path.basename(sourceFile, path.extname(sourceFile));
     source = toSlash(sourceFile);
-    repos = readCodeWorkspace(sourceFile, warn);
+    ({ repos, rest: wsRest } = readCodeWorkspace(sourceFile, warn));
   } else {
     if (!opts.name || !opts.folders?.length) throw new Error('Need --workspace <file>, or --name <n> --folders <p1> <p2> ...');
     wsName = opts.name;
@@ -112,12 +114,17 @@ export function generate(opts) {
   const wsFile = path.join(outDir, `${wsName}.code-workspace`);
   const wsFileIsSource = sourceFile && path.resolve(sourceFile) === path.resolve(wsFile);
   if (!wsFileIsSource) {
+    // List mode has no source file: keep what the umbrella being overwritten already had.
+    if (!wsRest && fs.existsSync(wsFile)) {
+      try { wsRest = readCodeWorkspace(wsFile, () => {}).rest; } catch { warn(`Could not parse ${wsFile}; its settings are not kept`); }
+    }
     const wsJson = {
       folders: [
         { name: `Workspace (${wsName})`, path: 'Workspace' },
         ...repos.map((r) => ({ path: toSlash(path.relative(outDir, r.path)) })),
       ],
       settings: {},
+      ...wsRest,
     };
     fs.writeFileSync(wsFile, JSON.stringify(wsJson, null, 2) + '\n');
   }
@@ -165,6 +172,7 @@ ${rows}
   const moduleXml = [];
   const vcsXml = [];
   const orderXml = [];
+  const moduleNames = new Set();
   const createdImls = [];
   for (const r of repos) {
     const repoIdea = path.join(r.path, '.idea');
@@ -180,12 +188,19 @@ ${rows}
     }
     const imlRel = rel(imlPath);
     const moduleName = path.basename(imlPath, '.iml');
+    moduleNames.add(moduleName.toLowerCase());
     moduleXml.push(`      <module fileurl="file://${imlRel}" filepath="${imlRel}" />`);
     orderXml.push(`    <orderEntry type="module" module-name="${moduleName}" />`);
     if (r.isGit) vcsXml.push(`    <mapping directory="${rel(r.path)}" vcs="Git" />`);
   }
 
-  const umbrellaIml = `${wsName}.iml`;
+  // WebStorm identifies modules by name: an umbrella named after one of its repos
+  // (e.g. Agent.code-workspace holding the Agent repo) would shadow that repo's module.
+  let umbrellaModule = wsName;
+  for (let i = 2; moduleNames.has(umbrellaModule.toLowerCase()); i++) {
+    umbrellaModule = i === 2 ? `${wsName}.workspace` : `${wsName}.workspace${i}`;
+  }
+  const umbrellaIml = `${umbrellaModule}.iml`;
   fs.writeFileSync(path.join(ideaDir, umbrellaIml), `<?xml version="1.0" encoding="UTF-8"?>
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">

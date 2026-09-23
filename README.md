@@ -81,6 +81,9 @@ repo that has never been opened in WebStorm.
 - Regenerating (`--force`) rewrites `CLAUDE.md`, `.claude/settings.json`,
   `<name>.code-workspace` and all of `.idea/` except `workspace.xml` — so
   attach/detach done in the WebStorm UI is lost unless you `/save-workspace` first.
+- Everything in the source `.code-workspace` besides `folders` (`settings`,
+  `launch`, `tasks`, `extensions`, ...) is copied into the umbrella's
+  `<name>.code-workspace` as-is; comments in it are not kept.
 - Repos on a different drive than the umbrella get absolute paths in `.idea`.
 - Open only one dialog at a time: on Windows a second dialog launched right after
   the first closes can come up without focus and hide behind other windows.
