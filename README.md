@@ -106,7 +106,9 @@ stops at whitespace. File contents are read live; new files need a regenerate.
   attach/detach done in the WebStorm UI is lost unless you `/save-workspace` first.
 - Everything in the source `.code-workspace` besides `folders` (`settings`,
   `launch`, `tasks`, `extensions`, ...) is copied into the umbrella's
-  `<name>.code-workspace` as-is; comments in it are not kept.
+  `<name>.code-workspace` as-is; comments in it are not kept. Folder `name`s that
+  differ from the folder's basename are kept too, so `${workspaceFolder:<name>}`
+  references still resolve.
 - Repos on a different drive than the umbrella get absolute paths in `.idea`.
 - Open only one dialog at a time: on Windows a second dialog launched right after
   the first closes can come up without focus and hide behind other windows.

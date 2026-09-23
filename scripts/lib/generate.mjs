@@ -231,7 +231,12 @@ export function generate(opts) {
     const wsJson = {
       folders: [
         { name: `Workspace (${wsName})`, path: 'Workspace' },
-        ...repos.map((r) => ({ path: toSlash(path.relative(outDir, r.path)) })),
+        // Cursor / VS Code default a folder's name to its basename; keep any other name
+        // (`${workspaceFolder:<name>}` in launch/tasks resolves by it).
+        ...repos.map((r) => ({
+          path: toSlash(path.relative(outDir, r.path)),
+          ...(r.name !== path.basename(r.path) && { name: r.name }),
+        })),
       ],
       settings: {},
       ...wsRest,
