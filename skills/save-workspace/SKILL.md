@@ -18,6 +18,11 @@ node "<skill-dir>/cli.mjs" <command> ...
 
 ## Steps
 
+0. **Already in an umbrella?** If the cwd is an umbrella's `Workspace/` folder
+   (`../<parent-name>.code-workspace` beside it), the user most likely wants to
+   sync it: run the `/update-workspace` steps instead. Save a new umbrella only if
+   they ask for a copy.
+
 1. **Collect the repos.**
    - If `$ARGUMENTS` contains paths, use those.
    - Otherwise call the `webstorm` MCP tool `get_repositories` (pass the cwd as

@@ -19,7 +19,7 @@ const toSlash = (p) => p.split(path.sep).join('/');
 const trimSlash = (p) => p.replace(/[\\/]+$/, '');
 
 // .code-workspace is JSONC: strip /* */ and whole-line // comments and trailing commas.
-function parseJsonc(text) {
+export function parseJsonc(text) {
   const cleaned = text
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/^\s*\/\/.*$/gm, '')
@@ -119,6 +119,14 @@ export function findAgentDocs(repoPath) {
   return docs;
 }
 
+// Every agent doc across the repos, for the snapshot: absolute path plus whether it always applies.
+export function docList(repos) {
+  return repos.flatMap((r) => findAgentDocs(r.path).map((d) => ({ file: `${r.path}/${d.file}`, always: d.always })));
+}
+
+// Written by every generate; /update-workspace diffs the three repo lists against it.
+export const SNAPSHOT_FILE = 'workspace-tools.json';
+
 // `@path` imports stop at whitespace, so such paths can only be listed.
 const importable = (p) => !/\s/.test(p);
 
@@ -156,7 +164,7 @@ Do not read these up front. Open one only when the task touches files or topics
 matching its scope.
 ${scoped.join('\n')}
 
-` : ''}Found when this umbrella was generated. Regenerate to pick up new files.
+` : ''}Found when this umbrella was generated. Run \`/update-workspace\` to pick up new files.
 `;
 }
 
@@ -226,7 +234,13 @@ export function generate(opts) {
   if (!wsFileIsSource) {
     // List mode has no source file: keep what the umbrella being overwritten already had.
     if (!wsRest && fs.existsSync(wsFile)) {
-      try { wsRest = readCodeWorkspace(wsFile, () => {}).rest; } catch { warn(`Could not parse ${wsFile}; its settings are not kept`); }
+      try {
+        const prev = readCodeWorkspace(wsFile, () => {});
+        wsRest = prev.rest;
+        // ...and its custom folder names.
+        const names = new Map(prev.repos.map((r) => [r.path.toLowerCase(), r.name]));
+        for (const r of repos) r.name = names.get(r.path.toLowerCase()) || r.name;
+      } catch { warn(`Could not parse ${wsFile}; its settings are not kept`); }
     }
     const wsJson = {
       folders: [
@@ -247,6 +261,21 @@ export function generate(opts) {
   // --- .claude/settings.json ---
   const settings = { permissions: { additionalDirectories: repos.map((r) => r.path) } };
   fs.writeFileSync(path.join(projDir, '.claude', 'settings.json'), JSON.stringify(settings, null, 2) + '\n');
+  // `/add-dir` may have saved repos here. settings.json now holds the full list, and a stale
+  // entry left behind would read as a repo added in Claude Code on the next sync.
+  const localFile = path.join(projDir, '.claude', 'settings.local.json');
+  if (fs.existsSync(localFile)) {
+    try {
+      const local = JSON.parse(fs.readFileSync(localFile, 'utf8'));
+      if (local.permissions?.additionalDirectories) {
+        delete local.permissions.additionalDirectories;
+        if (!Object.keys(local.permissions).length) delete local.permissions;
+        fs.writeFileSync(localFile, JSON.stringify(local, null, 2) + '\n');
+      }
+    } catch { warn(`Could not parse ${localFile}; its additionalDirectories are not cleared`); }
+  }
+  const snapshot = { repos: repos.map((r) => r.path), imports: opts.imports !== false, docs: docList(repos) };
+  fs.writeFileSync(path.join(projDir, '.claude', SNAPSHOT_FILE), JSON.stringify(snapshot, null, 2) + '\n');
 
   // --- CLAUDE.md ---
   const rows = repos.map((r) => `| ${r.name} | \`${r.path}\` | ${r.isGit ? 'git' : '-'} |`).join('\n');
@@ -266,8 +295,8 @@ ${docsSection(repos, opts.imports !== false)}
 - Always state which repo a file belongs to.
 - Run git per repo: \`git -C <path> ...\`. Each repo has its own branch/status.
 - Search across all repos (pass the paths to Glob/Grep), not just this folder.
-- To change the repo set: edit \`../${wsName}.code-workspace\` and run
-  \`/import-workspace\` on it (or \`/save-workspace\` from WebStorm).
+- To change the repo set: attach/detach in WebStorm, edit \`../${wsName}.code-workspace\`
+  or use \`/add-dir\`, then run \`/update-workspace\` to bring the other two in line.
 `);
 
   // --- .idea (WebStorm project with all repos attached) ---

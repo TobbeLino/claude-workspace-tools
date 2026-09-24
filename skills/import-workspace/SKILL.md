@@ -28,10 +28,10 @@ node "<skill-dir>/cli.mjs" <command> ...
      exit 2 → no dialog toolkit (headless/SSH): ask for the path in chat.
 
 2. **Decide the target folder.**
-   - If the chosen file already lives *inside* an umbrella folder
-     (`<dir>/<dir-name>.code-workspace` with `<dir>/Workspace/.claude/settings.json`
-     beside it), this is a **refresh**: target = that folder, use `--force`
-     without asking, and skip the dialog.
+   - If the chosen file is an umbrella's own (`<dir>/<dir-name>.code-workspace`
+     with `<dir>/Workspace/.claude/settings.json` beside it), don't import it:
+     that would drop repos attached in WebStorm or added with `/add-dir` since.
+     Run the `/update-workspace` steps on `<dir>` instead.
    - Otherwise pop the native Save-As dialog. Don't ask in chat first. It opens
      in the workspaces root with the file's basename pre-filled, so clicking
      OK keeps the default `<workspaces-root>/<file-basename>/` (blocks; use a
@@ -68,5 +68,5 @@ node "<skill-dir>/cli.mjs" <command> ...
 
 5. **Report** briefly: `<dir>/Workspace` for WebStorm / `claude`, and that the
    umbrella's own `<dir>/<name>.code-workspace` is now the file to open in
-   Cursor / VS Code (so all IDEs share one definition; re-run `/import-workspace` on it
-   to refresh WebStorm after editing).
+   Cursor / VS Code (so all IDEs share one definition; after adding or removing
+   repos in any IDE, run `/update-workspace` to sync the others).

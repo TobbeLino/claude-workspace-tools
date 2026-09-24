@@ -1,13 +1,15 @@
 #!/usr/bin/env node
-// CLI used by the /save-workspace and /import-workspace Claude Code skills.
+// CLI used by the /save-workspace, /import-workspace and /update-workspace Claude Code skills.
 //
 //   workspace-tools generate --workspace <file.code-workspace> [--out <dir>] [--force] [--no-import]
 //   workspace-tools generate --name <n> --folders <p1> <p2> ... [--out <dir>] [--force] [--no-import]
+//   workspace-tools update [--dir <umbrella>] [--dry-run] [--folders <p1> ...]   -> sync the three repo lists
+//   workspace-tools check [<umbrella>] [--hook]                            -> report drift (SessionStart hook)
 //   workspace-tools select-folder [--suggest <name>] [--initial <dir>]   -> prints <parent>/<name>
 //   workspace-tools select-file   [--initial <dir>]                      -> prints chosen file
 //   workspace-tools open-ide <dir>
 //   workspace-tools info
-//   workspace-tools install [--workspaces-root <dir>] [--no-claude-md]   -> link skills into ~/.claude, add CLAUDE.md block
+//   workspace-tools install [--workspaces-root <dir>] [--no-claude-md] [--no-hook]   -> link skills, CLAUDE.md block, drift hook
 //   workspace-tools uninstall
 //
 // Exit codes for the dialogs: 0 chosen, 1 cancelled, 2 no dialog toolkit available (ask the user instead).
@@ -19,6 +21,9 @@ import { defaultWorkspacesRoot, generate } from './lib/generate.mjs';
 import { selectOpenFile, selectSaveFolder } from './lib/dialogs.mjs';
 import { openInWebStorm } from './lib/ide.mjs';
 import { install, uninstall } from './lib/install.mjs';
+import { docChanges, findUmbrella, formatPlan, plan } from './lib/sync.mjs';
+
+const toSlash = (p) => p.split(path.sep).join('/');
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -65,6 +70,69 @@ switch (cmd) {
     break;
   }
 
+  case 'update': {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { dir: { type: 'string' }, 'dry-run': { type: 'boolean', default: false }, folders: { type: 'string', multiple: true } },
+    });
+    const start = values.dir || process.cwd();
+    const outDir = findUmbrella(start);
+    if (!outDir) fail(`No umbrella at or above ${start} (need <dir>/<dir-name>.code-workspace and <dir>/Workspace/).`);
+    // As in generate, `--folders a b c` works: extra positionals are folders.
+    values.folders = [...(values.folders || []), ...positionals];
+    const p = plan(outDir);
+    console.log(`Umbrella: ${toSlash(outDir)}`);
+    for (const l of formatPlan(p)) console.log(l);
+    // With --folders the caller has already reviewed the plan and picked the final set.
+    const folders = values.folders?.length ? values.folders : p.result;
+    const docs = docChanges(p.baseline?.docs, folders);
+    if (docs.length) { console.log('Agent doc changes:'); for (const d of docs) console.log(`  ${d}`); }
+    console.log('Repos after update:');
+    for (const f of folders) console.log(`  ${f}${fs.existsSync(f) ? '' : '  (not found on disk: skipped)'}`);
+    if (!p.changes.length && !docs.length && !values.folders?.length && p.baseline?.from === 'snapshot') console.log('In sync.');
+    if (values['dry-run']) break;
+    let res;
+    try {
+      res = generate({ name: path.basename(outDir), outDir, folders, force: true, imports: p.baseline?.imports ?? true });
+    } catch (e) {
+      fail(e.message);
+    }
+    for (const iml of res.createdImls) console.log(`Created ${iml}`);
+    console.log(`Updated ${res.outDir}: ${res.repos.length} repos in all three lists.`);
+    break;
+  }
+
+  case 'check': {
+    // SessionStart hook: tell Claude (and the user) when an umbrella's repo lists have drifted.
+    // Silent outside an umbrella, when in sync, and on any error — a hook must never get in the way.
+    const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { hook: { type: 'boolean', default: false } } });
+    try {
+      let start = positionals[0] || process.cwd();
+      if (values.hook) {
+        try { start = JSON.parse(fs.readFileSync(0, 'utf8')).cwd || start; } catch { /* no stdin */ }
+      }
+      const outDir = findUmbrella(start);
+      if (!outDir) { if (!values.hook) console.log('Not inside an umbrella.'); break; }
+      const p = plan(outDir);
+      const docs = docChanges(p.baseline?.docs, p.result);
+      const drift = [...formatPlan(p), ...(docs.length ? ['Agent doc changes:', ...docs.map((d) => `  ${d}`)] : [])];
+      if (!p.changes.length && !docs.length && !p.errors.length) { if (!values.hook) console.log('In sync.'); break; }
+      const msg = `Umbrella "${path.basename(outDir)}" is out of sync:\n${drift.join('\n')}`;
+      if (!values.hook) { console.log(msg); break; }
+      console.log(JSON.stringify({
+        systemMessage: `claude-workspace-tools: ${msg}\nRun /update-workspace to sync.`,
+        hookSpecificOutput: {
+          hookEventName: 'SessionStart',
+          additionalContext: `${msg}\nUntil /update-workspace runs, the three lists disagree: additionalDirectories may miss repos the user added elsewhere. Suggest /update-workspace once; don't run it unasked.`,
+        },
+      }));
+    } catch (e) {
+      if (!values.hook) fail(e.message);
+    }
+    break;
+  }
+
   case 'select-folder': {
     const { values } = parseArgs({ args: rest, options: { suggest: { type: 'string' }, initial: { type: 'string' } } });
     const initialDir = values.initial || defaultWorkspacesRoot();
@@ -99,10 +167,14 @@ switch (cmd) {
   case 'install': {
     const { values } = parseArgs({
       args: rest,
-      options: { 'workspaces-root': { type: 'string' }, 'no-claude-md': { type: 'boolean', default: false } },
+      options: {
+        'workspaces-root': { type: 'string' },
+        'no-claude-md': { type: 'boolean', default: false },
+        'no-hook': { type: 'boolean', default: false },
+      },
     });
     try {
-      install({ workspacesRoot: values['workspaces-root'], claudeMd: !values['no-claude-md'] });
+      install({ workspacesRoot: values['workspaces-root'], claudeMd: !values['no-claude-md'], hook: !values['no-hook'] });
     } catch (e) {
       fail(e.message);
     }
@@ -115,5 +187,5 @@ switch (cmd) {
     break;
 
   default:
-    fail(`Usage: workspace-tools <generate|select-folder|select-file|open-ide|info|install|uninstall> ...`);
+    fail(`Usage: workspace-tools <generate|update|check|select-folder|select-file|open-ide|info|install|uninstall> ...`);
 }
